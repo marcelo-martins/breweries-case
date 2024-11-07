@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_db:/var/lib/postgresql/data
+    networks:
+      - airflow_network
+
+  airflow-webserver:
+    image: apache/airflow:2.5.0
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__FERNET_KEY=
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    ports:
+      - "8080:8080"
+    command: ["bash", "-c", "airflow db init && airflow users create --username admin --password admin --firstname Airflow --lastname Admin --role Admin --email admin@example.com && airflow webserver"]
+    networks:
+      - airflow_network
+    depends_on:
+      - postgres  # Assegura que o postgres esteja pronto antes de iniciar o webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.5.0
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    command: ["airflow", "scheduler"]
+    networks:
+      - airflow_network
+    depends_on:
+      - airflow-webserver  # O scheduler vai aguardar o webserver iniciar corretamente
+
+volumes:
+  postgres_db:
+
+networks:
+  airflow_network:
+    driver: bridge
