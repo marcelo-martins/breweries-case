@@ -7,6 +7,10 @@
 #airflow logs
 logs/
 
+#airflow config
+airflow-webserver.pid
+airflow.cfg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
