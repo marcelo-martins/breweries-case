@@ -11,11 +11,15 @@ services:
       - airflow_network
 
   airflow-webserver:
-    image: apache/airflow:2.5.0
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CORE__FERNET_KEY=
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+      - SPARK_HOME=/opt/spark
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
@@ -27,13 +31,17 @@ services:
     networks:
       - airflow_network
     depends_on:
-      - postgres  # Assegura que o postgres esteja pronto antes de iniciar o webserver
+      - postgres
 
   airflow-scheduler:
-    image: apache/airflow:2.5.0
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+      - SPARK_HOME=/opt/spark
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
@@ -43,7 +51,7 @@ services:
     networks:
       - airflow_network
     depends_on:
-      - airflow-webserver  # O scheduler vai aguardar o webserver iniciar corretamente
+      - airflow-webserver
 
 volumes:
   postgres_db:

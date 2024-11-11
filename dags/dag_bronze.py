@@ -1,10 +1,23 @@
 from airflow import DAG
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+# from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.hooks.base_hook import BaseHook
+import boto3
 from airflow.operators.python_operator import PythonOperator
 import requests
 import pandas as pd
 import io
 from datetime import datetime, timedelta
+
+def get_boto3_client():
+    # Obtendo credenciais do Airflow
+    connection = BaseHook.get_connection('awsconn')
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=connection.login,
+        aws_secret_access_key=connection.password,
+        region_name='us-east-2'
+    )
+    return s3_client
 
 # Função de teste para o PythonOperator
 def fetch_brewery_data_to_s3():
@@ -14,26 +27,20 @@ def fetch_brewery_data_to_s3():
     response = requests.get(API_URL)
     
     if response.status_code == 200:
-        # Convertendo a resposta para JSON
         data = response.json()
-        
-        # Convertendo para DataFrame
         df = pd.DataFrame(data)
         
-        # Salvando em um buffer (em memória)
         csv_buffer = io.StringIO()
         df.to_csv(csv_buffer, index=False)
         csv_buffer.seek(0)
         
-        # Conectando ao S3
-        s3_hook = S3Hook(aws_conn_id='awsconn')
-        
-        # Nome do bucket e caminho no S3
+        # Usando boto3 para se conectar ao S3
+        s3_client = get_boto3_client()
         bucket_name = 'abi-bees-case-2'
         s3_key = 'bronze/brewery_data.csv'
         
-        # Enviando o CSV para o S3
-        s3_hook.load_string(csv_buffer.getvalue(), key=s3_key, bucket_name=bucket_name, replace=True)
+        # Enviando o arquivo CSV para o S3
+        s3_client.put_object(Body=csv_buffer.getvalue(), Bucket=bucket_name, Key=s3_key)
 
 default_args = {
     'owner': 'airflow',
