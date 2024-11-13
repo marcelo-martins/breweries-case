@@ -1,14 +1,14 @@
 # Brewery API data to data lake
 This repository was built to solve a data engineering problem: reading data from an API and creating a view with it.
 
-The main idea is to develop a medallion architecture in a data lake (AWS S3 in this case) and creating the necessary files to achive the desired view.
+The main idea is to develop a medallion architecture in a data lake (AWS S3 in this case) and creating the necessary files to archive the desired view.
 
 ## Tools
 
 This project uses the following tools:
 + **Airflow**: used for orchestrating the ETL pipeline, scheduling and managing task execution, such as API calls and data transformations
 + **Docker**: provides containerization to ensure that the application and its dependencies run consistently across environments. It also manages the Airflow components and database
-+ **Pandas** and **Pyspark**: used for business rules and data conversion
++ **Pandas** and **Pyspark**: used for implementing business rules and performing data transformations
 
 ## Main files
 1. **docker-compose.yml** - this file is responsible for creating the containers. There are three containers in this project:
@@ -36,15 +36,24 @@ If you are interested in running this application on your local machine, here ar
 5. Access **http://localhost:8080/** to interact with the Airflow UI. You can run the DAG from there
 
 ## How the code works
-After running the DAG, the follow steps are executed:
-+ A call to the **https://api.openbrewerydb.org/breweries** is made. The result is stored in a pandas dataframe as a csv and then uploaded to S3 in the bronze layer
+After running the DAG, the following steps are executed:
++ The DAG makes a call to the **https://api.openbrewerydb.org/breweries** API. The result is stored in a pandas dataframe as a csv and then uploaded to S3 in the bronze layer
 + If the above step runs successfully, the next DAG reads the data from the bronze layer with PySpark, converts it to parquet, partitions the file by type and location (`brewery_type`, `country`, `state_province` and `city`), drops the `state` column, as it is the same as `state_province` and finally, writes it to the silver layer
 + If the above step also runs successfully, the next DAG reads the data from the silver layer with PySpark, aggregates it to create a simple view with the amount of breweries by type and location and writes it to the gold layer
 + If you leave the airflow webserver running, the DAG will reprocess daily
 
 ## Design choices
-+ This project creates a simple data lake structure by splitting a bucket in three folders: bronze, silver and gold, even though AWS recommends to create [one bucket to each layer](https://docs.aws.amazon.com/prescriptive-guidance/latest/defining-bucket-names-data-lakes/data-layer-definitions.html) for security purposes
-+ To share environment variables between the conteiner and the DAGS, the **docker-compose** file read the **.env** file and creates airflow variables that can be used by any DAG. This approach is probably not the most efficient to be used in production
++ This project creates a simple data lake structure by splitting a bucket in three folders: bronze, silver and gold, even though AWS recommends creating [a separate bucket for each layer](https://docs.aws.amazon.com/prescriptive-guidance/latest/defining-bucket-names-data-lakes/data-layer-definitions.html) for security purposes
++ To share environment variables between the conteiner and the DAGS, the **docker-compose** file read the **.env** file and creates airflow variables that can be used by any DAG. This approach may not be the most efficient for production environments
 + The airflow, pyspark and .jars versions are defined in the Dockerfile but this code should work in most recent versions as well, but this has **not** been tested
 
 ## Monitoring
+For future improvements, the monitoring of the pipeline can be better, by:
++ Implementing failure alerts in the main DAG to send, for example, a notification email
++ Creating a pipeline to analyse the LOGS and see if, for example, a DAG is taking too long to execute since the day X
++ Using monitoring tools to analyse CPU, RAM and other metrics for Docker and Airflow
+
+## Data Quality
+The code implements error handling, but it could improve in data quality, by:
++ Implementing validations in the API call. This was not done in this case due to the fact that the tested API is very simple, but would be necessary in a more robust API call
++ This code can be forked and scaled in a larger project, so a data quality framework could be useful in this case
