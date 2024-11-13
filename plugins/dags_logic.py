@@ -1,53 +1,83 @@
 import requests
 import pandas as pd
-import io
 import sys
 sys.path.append('/opt/airflow/utils')
 import utils
 from pyspark.sql import functions as F
+from airflow.models import Variable
+import logging
 
-def fetch_brewery_data_to_s3():
-    API_URL = 'https://api.openbrewerydb.org/breweries'
-    
-    response = requests.get(API_URL)
+logger = logging.getLogger(__name__)
+
+BRONZE_KEY = 'bronze/brewery_data.csv'
+SILVER_KEY = 'silver'
+GOLD_KEY = 'gold'
+API_URL = 'https://api.openbrewerydb.org/breweries'
+AWS_BUCKET_NAME = Variable.get("AWS_BUCKET_NAME")
+
+def bronze_fetch_brewery_data_to_s3():
+    try:
+        response = requests.get(API_URL)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logger.exception(f'Error fetching data from the API. Status code {response.status_code}')
+        raise Exception(f'Error fetching data from the API. Status code {response.status_code}')
     
     if response.status_code == 200:
         data = response.json()
         df = pd.DataFrame(data)
+
+        try:
+            df.to_csv(f"s3a://{AWS_BUCKET_NAME}/{BRONZE_KEY}", index=False, storage_options={
+                'key': Variable.get("AWS_ACCESS_KEY"),
+                'secret': Variable.get("AWS_SECRET_KEY")
+            })
+        except Exception as e:
+            logger.exception(f'Error writing data to the bronze layer in AWS S3')
+            raise
         
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False)
-        csv_buffer.seek(0)
-        
-        s3_client, _ = utils.get_boto3_client()
-        bucket_name = 'abi-bees-case-2'
-        s3_key = 'bronze/brewery_data.csv'
-        
-        s3_client.put_object(Body=csv_buffer.getvalue(), Bucket=bucket_name, Key=s3_key)
+def silver_process_data_to_parquet(): 
+    s3_bronze_path = f"s3a://{AWS_BUCKET_NAME}/{BRONZE_KEY}"
+    s3_silver_path = f"s3a://{AWS_BUCKET_NAME}/{SILVER_KEY}"
 
-def process_data_to_parquet(): 
-    bucket_name = 'abi-bees-case-2'
-    bronze_key = 'bronze/brewery_data.csv'
-    silver_key = 'silver'
+    try:
+        spark = utils.get_spark_session()
+    except Exception as e:
+        logger.exception(f'Error during SparkSession creation')
+        raise
 
-    spark = utils.get_spark_session()
+    try:
+        df_bronze = spark.read.csv(s3_bronze_path, header=True).drop('state')
+    except Exception as e:
+        logger.exception(f'Error fetching data from bronze layer in AWS S3')
+        raise
 
-    df_bronze = spark.read.csv(f"s3a://{bucket_name}/{bronze_key}", header=True).drop('state')
-
-    df_bronze.write.mode("overwrite"). \
-        option("compression", "SNAPPY"). \
-        partitionBy("brewery_type", "country", "state_province", "city"). \
-        parquet(f"s3a://{bucket_name}/{silver_key}")
+    try:
+        utils.s3_write_parquet(df=df_bronze, path=s3_silver_path, partition_columns=["brewery_type", "country", "state_province", "city"])
+    except Exception as e:
+        logger.exception(f'Error writing data to silver layer in AWS S3')
+        raise
     
-def create_view_lake():
-    bucket_name = 'abi-bees-case-2'
-    silver_key = 'silver'
-    gold_key = 'gold'
+def gold_create_view_lake():
+    s3_silver_path = f"s3a://{AWS_BUCKET_NAME}/{SILVER_KEY}"
+    s3_gold_path = f"s3a://{AWS_BUCKET_NAME}/{GOLD_KEY}"
 
-    spark = utils.get_spark_session()
+    try:
+        spark = utils.get_spark_session()
+    except Exception as e:
+        logger.exception(f'Error during SparkSession creation')
+        raise
 
-    df_silver = spark.read.parquet(f"s3a://{bucket_name}/{silver_key}")
+    try:
+        df_silver = spark.read.parquet(s3_silver_path)
+    except Exception as e:
+        logger.exception(f'Error fetching data from bronze layer in AWS S3')
+        raise
     
     df_gold = df_silver.groupBy("brewery_type", "country", "state_province", "city").agg(F.count('*').alias('count_breweries'))
     
-    df_gold.write.mode("overwrite").parquet(f"s3a://{bucket_name}/{gold_key}")
+    try:
+        utils.s3_write_parquet(df=df_gold, path=s3_gold_path)
+    except Exception as e:
+        logger.exception(f'Error writing view to gold layer in AWS S3')
+        raise

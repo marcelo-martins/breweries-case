@@ -26,9 +26,23 @@ services:
       - ./plugins:/opt/airflow/plugins
       - ./utils:/opt/airflow/utils
       - .:/opt/airflow
+    env_file:
+      - .env
     ports:
       - "8080:8080"
-    command: ["bash", "-c", "airflow db upgrade && airflow db init && airflow users create --username admin --password admin --firstname Airflow --lastname Admin --role Admin --email admin@example.com && airflow webserver && pip install -r /opt/airflow/requirements.txt"]
+    command: >
+      bash -c "
+        airflow variables set AWS_ACCESS_KEY $AWS_ACCESS_KEY &&
+        airflow variables set AWS_SECRET_KEY $AWS_SECRET_KEY &&
+        airflow variables set AWS_BUCKET_NAME $AWS_BUCKET_NAME &&
+        airflow variables set AWS_BUCKET_REGION $AWS_BUCKET_REGION &&
+        airflow db upgrade &&
+        airflow db init &&
+        airflow users create --username admin --password admin --firstname Airflow --lastname Admin --role Admin --email admin@example.com &&
+        airflow webserver &&
+        pip install -r /opt/airflow/requirements.txt
+      "
+
     networks:
       - airflow_network
     depends_on:
