@@ -31,9 +31,10 @@ This project uses the following tools:
 If you are interested in running this application on your local machine, here are the necessary steps:
 1. Installing Docker e Docker Compose on [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), [Linux](https://docs.docker.com/desktop/setup/install/linux/) or [Mac](https://docs.docker.com/desktop/setup/install/mac-install/)
 2. If on Windows, open the Docker Desktop Application
-3. Clone this repository and cd into it. `cd path/to/repo`
-4. Run `docker-compose up --build -d`. The build flag is only necessary if you change anything in the code. The `-d` flag allows you to keep using the same terminal and it is also optional.
-5. Access **http://localhost:8080/** to interact with the Airflow UI. You can run the DAG from there
+3. Create an [AWS account](https://aws.amazon.com/pt/resources/create-account/) and [create a bucket](https://docs.aws.amazon.com/AmazonS3/latest/userguide/create-bucket-overview.html) to store the data
+4. Clone this repository and cd into it. `cd path/to/repo`
+5. Run `docker-compose up --build -d`. The build flag is only necessary if you change anything in the code. The `-d` flag allows you to keep using the same terminal and it is also optional.
+6. Access **http://localhost:8080/** to interact with the Airflow UI. You can run the DAG from there
 
 ## How the code works
 After running the DAG, the following steps are executed:
